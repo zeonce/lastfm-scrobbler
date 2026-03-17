@@ -22,6 +22,7 @@ class Scrobbler:
 
         # scrobbler will upload if the track has been played for 4 mins or half the total length
         self.scrobble_time_threshold = int(kwargs["scrobble_time_threshold"])
+        self.stream_scrobble_threshold = int(kwargs["stream_scrobble_threshold"])
 
         # offline cache
         self.cache = Cache()
@@ -77,7 +78,12 @@ class Scrobbler:
                     )
                 except Exception as e:
                     logger.error(f"Failed to report now playing status")
-            if player_obj.total_played_time >= min(self.scrobble_time_threshold, int(player_obj.length / 2)) and not player_obj.if_scrobbled:
+            if player_obj.is_length_dynamic or player_obj.length == 0:
+                scrobble_threshold = self.stream_scrobble_threshold
+            else:
+                scrobble_threshold = min(self.scrobble_time_threshold, int(player_obj.length / 2))
+
+            if player_obj.total_played_time >= scrobble_threshold and not player_obj.if_scrobbled:
                 scrobble_list.append(player_obj)
                 player_obj.if_scrobbled = True
             else:
