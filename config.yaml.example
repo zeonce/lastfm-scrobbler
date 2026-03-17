@@ -14,5 +14,8 @@ application_whitelist: [ "org.mpris.MediaPlayer2.harmonoid", "org.mpris.MediaPla
 # by default, scrobbler will upload if the track has been played for 4 * 60 seconds or half the total length
 scrobble_time_threshold: 240
 
+# for streams with unknown track length, scrobble after this many seconds
+stream_scrobble_threshold: 120
+
 # app's log level
 log_level: DEBUG
