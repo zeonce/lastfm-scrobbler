@@ -46,6 +46,13 @@ class PlayerState:
         self.discNumber = self.get_value_from_dict(metadata_dict, "xesam:discNumber", expect_type="int")
         self.firstUsed = self.get_value_from_dict(metadata_dict, "xesam:firstUsed")
         self.title = self.get_value_from_dict(metadata_dict, "xesam:title")
+        
+        if not self.artist:
+            try:
+                self.artist, self.title = self.title.split(" - ", 1)
+            except ValueError:
+                pass
+        
         self.trackNumber = self.get_value_from_dict(metadata_dict, "xesam:trackNumber", expect_type="int")
         self.url = self.get_value_from_dict(metadata_dict, "xesam:url")
         if self.url == "":
