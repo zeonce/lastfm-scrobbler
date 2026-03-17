@@ -6,7 +6,11 @@ class PlayerState:
         self.total_played_time = 0
         self.last_observation_timestamp = get_unix_timestamp()
         self.trackid = ""
+        self.title = ""
+        self.artist = ""
         self.if_scrobbled = False
+        self.is_length_dynamic = False
+        self.length = 0
         if metadata_dict is not None:
             self.update_status(metadata_dict, playback_status, self.last_observation_timestamp)
 
@@ -26,48 +30,79 @@ class PlayerState:
         return ", ".join(artist_array)
     
     def update_status(self, metadata_dict, playback_status, timestamp):
-        # reset status if the track change
-        # some players won't update trackid, so we use the title as an additional condition
-        if self.trackid == self.get_value_from_dict(metadata_dict, "mpris:trackid") and self.title == self.get_value_from_dict(metadata_dict, "xesam:title"):
+        # 1. Read all metadata into local variables
+        new_trackid = self.get_value_from_dict(metadata_dict, "mpris:trackid")
+        raw_new_title = self.get_value_from_dict(metadata_dict, "xesam:title").strip()
+        new_artist_list = self.get_value_from_dict(metadata_dict, "xesam:artist", expect_type="list")
+        new_length_us = self.get_value_from_dict(metadata_dict, "mpris:length", expect_type="int")
+        new_art_url = self.get_value_from_dict(metadata_dict, "mpris:artUrl")
+        new_album = self.get_value_from_dict(metadata_dict, "xesam:album")
+        new_album_artist_list = self.get_value_from_dict(metadata_dict, "xesam:albumArtist", expect_type="list")
+        new_disc_number = self.get_value_from_dict(metadata_dict, "xesam:discNumber", expect_type="int")
+        new_first_used = self.get_value_from_dict(metadata_dict, "xesam:firstUsed")
+        new_track_number = self.get_value_from_dict(metadata_dict, "xesam:trackNumber", expect_type="int")
+        new_url = self.get_value_from_dict(metadata_dict, "xesam:url")
+
+        # 2. Determine definitive artist and title from new metadata
+        final_new_artist = self.handle_multiple_artists(new_artist_list)
+        final_new_title = raw_new_title
+
+        is_stream = not new_artist_list
+        if is_stream:
+            try:
+                # For streams, parse "Artist - Title" format
+                artist_part, title_part = raw_new_title.split(" - ", 1)
+                final_new_artist = artist_part.strip()
+                final_new_title = title_part.strip()
+            except ValueError:
+                # If split fails, the whole raw title is the title
+                final_new_title = raw_new_title
+
+        # 3. Compare with stored state to see if song has changed
+        if is_stream:
+            # For streams, we can't trust trackid, compare artist and title
+            is_same_song = (self.artist == final_new_artist and self.title == final_new_title)
+        else:
+            # For regular tracks, trackid is most reliable
+            is_same_song = (self.trackid == new_trackid)
+
+        # 4. Update played time and scrobble status
+        if is_same_song:
             self.total_played_time += (timestamp - self.last_observation_timestamp) if playback_status == "Playing" else 0
         else:
             self.total_played_time = 0
             self.if_scrobbled = False
+            self.is_length_dynamic = False
 
-        # time length of the current song in seconds
-        self.length = int(self.get_value_from_dict(metadata_dict, "mpris:length", expect_type="int") / 1000000)
-        # image file path
-        self.artUrl = self.get_value_from_dict(metadata_dict, "mpris:artUrl")
-        self.album = self.get_value_from_dict(metadata_dict, "xesam:album")
-        self.artist = self.handle_multiple_artists(self.get_value_from_dict(metadata_dict, "xesam:artist", expect_type="list"))
-        self.albumArtist = self.handle_multiple_artists(self.get_value_from_dict(metadata_dict, "xesam:albumArtist", expect_type="list"))
+        # 5. Update dynamic length flag
+        new_length = int(new_length_us / 1000000)
+        if is_same_song and new_length > self.length:
+            self.is_length_dynamic = True
+            
+        # 6. Update all self properties with the new, processed values
+        self.length = new_length
+        self.trackid = new_trackid
+        self.title = final_new_title
+        self.artist = final_new_artist
+        
+        self.artUrl = new_art_url
+        self.album = new_album
+        self.albumArtist = self.handle_multiple_artists(new_album_artist_list)
         if self.albumArtist == "":
             self.albumArtist = self.artist
-        self.discNumber = self.get_value_from_dict(metadata_dict, "xesam:discNumber", expect_type="int")
-        self.firstUsed = self.get_value_from_dict(metadata_dict, "xesam:firstUsed")
-        self.title = self.get_value_from_dict(metadata_dict, "xesam:title")
-        
-        if not self.artist:
-            try:
-                self.artist, self.title = self.title.split(" - ", 1)
-            except ValueError:
-                pass
-        
-        self.trackNumber = self.get_value_from_dict(metadata_dict, "xesam:trackNumber", expect_type="int")
-        self.url = self.get_value_from_dict(metadata_dict, "xesam:url")
+        self.discNumber = new_disc_number
+        self.firstUsed = new_first_used
+        self.trackNumber = new_track_number
+        self.url = new_url
         if self.url == "":
             self.url = "/"
-        self.trackid = self.get_value_from_dict(metadata_dict, "mpris:trackid")
-        # record the timestamp of last observation
+            
         self.last_observation_timestamp = timestamp
-
-        # record the playback status in observation
-        # May be 'Playing', 'Paused' or 'Stopped'.
         self.playback_status = playback_status
 
-    def get_value_from_dict(self, dict: dict, key: str, expect_type: str = "str"):
+    def get_value_from_dict(self, data: dict, key: str, expect_type: str = "str"):
         try:
-            value = dict[key]
+            value = data[key]
             if expect_type == "str":
                 return str(value)
             elif expect_type == "int":
