@@ -1,5 +1,7 @@
 ﻿# 🎵 Last.fm scrobbler
 
+Custom version made for me with the help of AI, improved the detection of artist when artist is in the title and the scrobbling of internet radio.
+
 A Last.fm scrobbler via MPRIS2 in Linux, implemented via [pylast](https://github.com/pylast/pylast) and [mpris2](https://pythonhosted.org/mpris2/index.html)
 
 Modified based on [dbus-scrobbler](https://github.com/spezifisch/dbus-scrobbler)
